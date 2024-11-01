@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veeva eTMF Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        .display-area {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            background-color: white;
+            margin: 20px auto;
+            overflow-y: auto;
+        }
+
+        .container {
+            text-align: center;
+            width: 90%;
+            padding: 20px;
+            margin: 0 auto;
+        }
+
+        .input-field {
+            width: 60%;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 16px;
+            border-radius: 24px;
+            border: 1px solid #ddd;
+        }
+
+        .button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 24px;
+            background-color: #4285f4;
+            color: white;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            background-color: #357ae8;
+        }
+
+        .error-message {
+            color: red;
+            margin-top: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            display: none; /* Hide table initially */
+        }
+
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f5f5f5;
+        }
+
+        .pagination {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            display: none; /* Initially hidden */
+        }
+
+        .pagination button {
+            padding: 5px 10px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .pagination button:disabled {
+            background-color: #ddd;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="display-area">
+        <div class="container">
+            <h2 style="color:rgb(240, 66, 13);">VAULT ETMF DOCUMENTS</h2>
+
+            <input type="text" id="search-input" class="input-field" placeholder="Enter search term...">
+            <div>
+                <button class="button" onclick="searchDocuments()">Search Documents</button>
+            </div>
+            <div id="error-message" class="error-message"></div>
+
+            <!-- Table to display the results -->
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>Document ID</th>
+                        <th>Document Name</th>
+                        <th>Life Cycle</th>
+                        <th>Document Status</th>
+                        <th>Document Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Table rows will be inserted dynamically here -->
+                </tbody>
+            </table>
+            <div id="document-count"></div>
+            <div class="pagination" id="pagination">
+                <button id="prev-page" onclick="prevPage()" disabled>Previous</button>
+                <button id="next-page" onclick="nextPage()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = ''; // Declare sessionId globally
+        let documents = []; // Store the search results
+        let currentPage = 1;
+        const recordsPerPage = 15;
+
+        // Automatically perform login when the page loads
+        window.onload = performLogin;
+
+        async function performLogin() {
+            const username = 'prana.user3@partnersi-prana4life.com';
+            const password = 'Pr4n4U$er333!';
+            const errorMessage = document.getElementById('error-message');
+
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const loginResponse = await fetch(
+                    'https://cors-anywhere.herokuapp.com/https://partnersi-prana4life-Quality.veevavault.com/api/v24.1/auth',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData,
+                    }
+                );
+
+                if (!loginResponse.ok) {
+                    const errorText = await loginResponse.text();
+                    throw new Error(`Login failed: ${errorText}`);
+                }
+
+                const loginData = await loginResponse.json();
+                sessionId = loginData.sessionId;  // Store sessionId
+            } catch (error) {
+                errorMessage.innerText = error.message;
+            }
+        }
+
+        async function searchDocuments() {
+            const query = document.getElementById('search-input').value.trim();
+            const errorMessage = document.getElementById('error-message');
+            const documentCount = document.getElementById('document-count');
+            const dataTableBody = document.querySelector('tbody');
+            const pagination = document.getElementById('pagination');
+            const dataTable = document.getElementById('data-table');
+
+            if (!query) {
+                errorMessage.innerText = 'Please enter a search term.';
+                dataTableBody.innerHTML = ''; // Clear table if no search term
+                dataTable.style.display = 'none'; // Hide table
+                pagination.style.display = 'none'; // Hide pagination
+                return;
+            }
+
+            if (!sessionId) {
+                errorMessage.innerText = 'You must log in first.';
+                return;
+            }
+
+            try {
+                const apiUrl = `https://cors-anywhere.herokuapp.com/https://partnersi-prana4life-Quality.veevavault.com/api/v24.2/objects/documents?search=${encodeURIComponent(query)}&scope=all`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': sessionId,  // Use sessionId directly
+                        'Accept': 'application/json',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error('Search failed. Please try again.');
+                }
+
+                const data = await response.json();
+
+                if (!data.documents || !Array.isArray(data.documents)) {
+                    errorMessage.innerText = 'No documents found.';
+                    dataTableBody.innerHTML = ''; // Clear table
+                    dataTable.style.display = 'none'; // Hide table
+                    pagination.style.display = 'none'; // Hide pagination
+                    return;
+                }
+
+                documents = data.documents; // Store all documents in an array
+                currentPage = 1; // Reset to the first page
+
+                // Clear previous error message and display document count
+                errorMessage.innerText = '';
+                documentCount.innerText = `Number of Available Documents: ${data.size}`;
+
+                displayPage(); // Display the first page
+                pagination.style.display = 'flex'; // Show pagination
+
+            } catch (error) {
+                errorMessage.innerText = error.message;
+            }
+        }
+
+        function displayPage() {
+            const dataTableBody = document.querySelector('#data-table tbody');
+            const dataTable = document.getElementById('data-table');
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            const endIndex = Math.min(startIndex + recordsPerPage, documents.length);
+
+            dataTableBody.innerHTML = ''; // Clear the table
+
+            // Display documents for the current page
+            for (let i = startIndex; i < endIndex; i++) {
+                const document = documents[i];
+                const row = dataTableBody.insertRow();
+
+                row.insertCell(0).innerText = document.document.id || 'N/A';
+                row.insertCell(1).innerHTML = `<a href="https://partnersi-prana4life-Quality.veevavault.com/ui/#doc_info/${document.document.id || 'N/A'}/0/1?newTvsl=true&idx=2&pt=al&tvsl=JmNvbmZpZ05hbWU9bGlicmFyeV9fdiZsb2NhdGlvbklkPTBUQjAwMDAwMDAwMDEwMiZzZWFyY2hUeXBlPWRvY3VtZW50Jml2cD0xJnNvcnRGaWVsZHMlNUIwJTVEJTVCdmFsdWUlNUQ9c3R1ZHlfYiZzb3J0RmllbGRzJTVCMCU1RCU1Qm9yZGVyJTVEPWFzYyZjdXN0b21EYXRhJTVCdmlld0lkJTVEPWFsbCZjdXN0b21EYXRhJTVCYmFja1RvTGluayU1RD10JTJGMFRCMDAwMDAwMDAwMTAyJTJGYWxsJTNGaXZ2JTNEUkVQT1JUSU5HJTI2ZmNhaCUzRHN0YXR1cyUyNTJDZG9jdW1lbnRUeXBlJTI1MkNjb3VudHJ5X2IlMjUyQ2JsaW5kaW5nX2IlMjUyQ19kb2NWZXJzaW9uRmlsdGVyJnJlc3BlY3RJbmRleD1mYWxzZQ" target="_blank">${document.document.name__v || 'N/A'}</a>`;
+												//"https://partnersi-prana4life-quality.veevavault.com/ui/#doc_info/${document.document.id || 'N/A'}/1/0=&idx=3&pt=al&sm=142117311729591939945&tvsl=Jml2cD0xJml2dj1DT01QQUNUJmZjYWg9c3RhZ2VMb29rdXBfYiUyQ0RvY0NyZWF0ZWRCeSUyQ3N0YXR1cyUyQ2xpZmVjeWNsZSZpbml0U3JjaD1mYWxzZSZzZWFyY2g9JTI1N0IlMjUyMl9hbnlPZldvcmRzJTI1MjIlMjUzQSUyNTIydGVzdCUyNTIyJTI1N0QmZnJzYzE9Q09OVEVOVCZhcmNoPWZhbHNlJmluY2x1ZGVBbGxMYW5ndWFnZXM9ZmFsc2Umc209MTQyMTE3MzExNzI5NTkxOTM5OTQ1Jml2bz1kZXNjJml2cz0mdmlld0lkPWFsbCZmYWNldHNVbmNoYW5nZWQ9ZmFsc2U," target="_blank">${document.document.name__v || 'N/A'}</a>`;
+                row.insertCell(2).innerText = document.document.lifecycle__v || 'N/A';
+                row.insertCell(3).innerText = document.document.status__v || 'N/A';
+                row.insertCell(4).innerText = document.document.type__v || 'N/A';
+            }
+
+            dataTable.style.display = 'table'; // Show the table
+
+            // Update pagination buttons
+            document.getElementById('prev-page').disabled = currentPage === 1;
+            document.getElementById('next-page').disabled = endIndex >= documents.length;
+        }
+
+        function nextPage() {
+            if (currentPage * recordsPerPage < documents.length) {
+                currentPage++;
+                displayPage();
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                displayPage();
+            }
+        }
+    </script>
+</body>
+</html>
